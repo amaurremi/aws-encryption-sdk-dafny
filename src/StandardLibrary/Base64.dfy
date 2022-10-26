@@ -166,7 +166,7 @@ module Base64 {
     else DecodeBlock(s[..4]) + DecodeRecursively(s[4..])
   }
 
-  function method EncodeRecursively(b: seq<uint8>): (s: seq<index>)
+  function EncodeRecursively(b: seq<uint8>): (s: seq<index>)
     requires |b| % 3 == 0
     ensures |s| == |b| / 3 * 4
     ensures |s| % 4 == 0
@@ -174,6 +174,48 @@ module Base64 {
   {
     if |b| == 0 then []
     else EncodeBlock(b[..3]) + EncodeRecursively(b[3..])
+  } by method {
+    var res: seq<index> := [];
+    for i := 0 to |b| / 3
+      invariant res == EncodeRecursively(b[..i * 3])
+    {
+      var start := i * 3;
+      var end := start + 3;
+      res := res + EncodeBlock(b[start..end]);
+      calc {
+           EncodeRecursively(b[..start]) + EncodeBlock(b[start..end]);
+        == { EncodeRecursivelyAssoc(b, i); }
+           EncodeBlock(b[..3]) + EncodeRecursively(b[3..end]);
+      }
+    }
+    assert b[..|b| / 3 * 3] == b[..|b|] == b;
+    assert res == EncodeRecursively(b[..|b| / 3 * 3]) == EncodeRecursively(b);
+    return res;
+  }
+
+  lemma EncodeRecursivelyAssocGen(b: seq<uint8>, i : int, j: int)
+    decreases j - i
+    requires |b| % 3 == 0
+    requires 0 <= j < |b| / 3
+    requires 0 <= i <= j
+    ensures EncodeRecursively(b[i * 3..j * 3 + 3]) == EncodeRecursively(b[i * 3..j * 3]) + EncodeBlock(b[j * 3..j * 3 + 3])
+  {
+    if (i != j) {
+      calc {
+        EncodeRecursively(b[i * 3..j * 3 + 3]);
+        == EncodeBlock(b[i * 3..i * 3 + 3]) + EncodeRecursively(b[i * 3 + 3..j * 3 + 3]);
+        == { EncodeRecursivelyAssocGen(b, i + 1, j); }
+        EncodeBlock(b[i * 3..i * 3 + 3]) + EncodeRecursively(b[i * 3 + 3..j * 3]) + EncodeBlock(b[j * 3..j * 3 + 3]);
+      }
+    }
+  }
+
+  lemma EncodeRecursivelyAssoc(b: seq<uint8>, i: int)
+    requires |b| % 3 == 0
+    requires 0 <= i < |b| / 3
+    ensures EncodeRecursively(b[..i * 3 + 3]) == EncodeRecursively(b[..i * 3]) + EncodeBlock(b[i * 3..i * 3 + 3])
+  {
+   EncodeRecursivelyAssocGen(b, 0, i);
   }
 
   lemma DecodeEncodeRecursively(s: seq<index>)
